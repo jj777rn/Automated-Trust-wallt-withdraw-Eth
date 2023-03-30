@@ -1,0 +1,84 @@
+from web3 import Web3
+from eth_account import Account
+import asyncio
+from termcolor import colored
+from web3 import Web3
+from eth_account import Account
+import asyncio
+from getpass import getpass
+from termcolor import colored
+
+# set up web3 provider
+web3 = Web3(Web3.HTTPProvider('https://mainnet.infura.io/v3/Your_Infura_API_Key'))
+
+# insert your Trust Wallet 12 secret phrases here, separated by spaces
+seed_phrase = 'The_12_Secret_Phrases'
+
+async def main():
+    # create account object from the seed phrase
+    Account.enable_unaudited_hdwallet_features()
+    account = Account.from_mnemonic(seed_phrase)
+    wallet_address = account.address
+    to_address = 'The_Walle_Address_Where_The_Fund_Going'
+    print(colored(f'Connecting to Trust Wallet...', 'green'))
+    try:
+        unlocked = False
+        while not unlocked:
+            password = getpass("Enter wallet password: ")
+            unlocked = await web3.eth.personal.unlock_account(wallet_address, password, 1)
+            if unlocked:
+                print(colored(f'Connected to Trust Wallet and unlocked', 'green'))
+            else:
+                print(colored(f'Incorrect password, please try again.', 'red'))
+    except:
+        print(colored(f'Unable to connect to Trust Wallet or unlock', 'red'))
+        return
+
+    print(colored(f'The Fund will be transferred from this Wallet address: {wallet_address}', 'green'))
+    print(colored(f'To this Wallet address: {to_address}', 'green'))
+
+    # check if to_address is a valid Ethereum address
+    if not web3.isAddress(to_address):
+        print(colored(f'{to_address} is not a valid Ethereum address', 'red'))
+        return
+
+    # get current balance of wallet
+    balance = web3.eth.get_balance(wallet_address)
+    print(colored(f'Current balance: {web3.fromWei(balance, "ether")} ETH', 'green'))
+
+    # set desired balance
+    desired_balance = 6  # in ether
+
+    # continuously check balance every 5 seconds until desired balance is reached
+    while balance <= web3.toWei(desired_balance, 'ether'):
+        balance = web3.eth.get_balance(wallet_address)
+        print(f'Current balance: {web3.fromWei(balance, "ether")} ETH')
+        await asyncio.sleep(1)
+
+    # build and sign transaction
+    unlock_duration = 1200  # in seconds
+    unlocked = False
+    while not unlocked:
+        password = getpass("Enter wallet password to unlock for transaction: ")
+        unlocked = await web3.eth.personal.unlock_account(wallet_address, password, unlock_duration)
+        if not unlocked:
+            print(colored(f'Incorrect password, please try again.', 'red'))
+    nonce = web3.eth.get_transaction_count(wallet_address)
+    gas_price = web3.eth.gas_price
+    gas_limit = 21000
+    value = web3.toWei(desired_balance, 'ether')
+    transaction = {
+        'to': to_address,
+        'value': value,
+        'gas': gas_limit,
+        'gasPrice': gas_price,
+        'nonce': nonce,
+        'chainId': 1  # mainnet
+    }
+    signed_transaction = account.sign_transaction(transaction)
+    tx_hash = web3.eth.send_raw_transaction(signed_transaction.rawTransaction)
+    print(colored(f'Transaction sent: {tx_hash.hex()}', 'green'))
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
